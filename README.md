@@ -1,0 +1,2 @@
+# Rust-Physics-Simulations-N-Body-Fluid-Flow-and-Kuramoto-Sivashinsky-Dynamics
+High-performance physics simulations implemented in Rust. Includes an N-Body gravitational system using Barnes–Hut approximation, a 2D incompressible fluid flow simulation generating a Kármán vortex street, and a chaotic Kuramoto–Sivashinsky equation solver using the ETDRK4 scheme with real-time and static visualization.
