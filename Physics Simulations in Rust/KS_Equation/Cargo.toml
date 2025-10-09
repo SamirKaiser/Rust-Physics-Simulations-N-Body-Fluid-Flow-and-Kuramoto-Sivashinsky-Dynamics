@@ -1,0 +1,9 @@
+[package]
+name = "ks_static_plot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+num-complex = "0.4"
+plotters = "0.3.7"
+rustfft = "6.0"
