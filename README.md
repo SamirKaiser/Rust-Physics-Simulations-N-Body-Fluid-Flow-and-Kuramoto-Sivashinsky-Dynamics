@@ -11,11 +11,11 @@ $$
 \ddot{\mathbf{r}}_i = G \sum_{j \ne i} \frac{m_j (\mathbf{r}_j - \mathbf{r}_i)}{|\mathbf{r}_j - \mathbf{r}_i|^3},
 $$
 
-where \( G \) is the gravitational constant and \( \mathbf{r}_i \) denotes the position vector of the \( i \)-th body.
+where $$G$$ is the gravitational constant and  $$\mathbf{r}_i$$ denotes the position vector of the $$i$$-th body.
 
 ## Numerical Method
 
-- **Force computation:** The **Barnes–Hut approximation** groups distant particles into hierarchical nodes, achieving \( O(N \log N) \) scaling.  
+- **Force computation:** The **Barnes–Hut approximation** groups distant particles into hierarchical nodes, achieving $$O(N \log N)$$ scaling.  
 - **Time integration:** The **leapfrog symplectic method** ensures stability and long-term energy conservation.  
 - **Parallelism:** The `rayon` crate enables multi-threaded force evaluation.  
 - **Visualization:** Real-time display using `eframe` and `egui`.
@@ -44,7 +44,7 @@ $$
 \nabla^2 \psi = -\omega, \qquad \mathbf{u} = (\partial_y \psi, -\partial_x \psi),
 $$
 
-where \( \omega \) is the vorticity, \( \psi \) the streamfunction, and \( \nu \) the kinematic viscosity.
+where $$\omega$$ is the vorticity, $$\psi$$ the streamfunction, and $$\nu$$ the kinematic viscosity.
 
 ## Numerical Method
 
@@ -79,8 +79,8 @@ This system exhibits **spatiotemporal chaos**, where small perturbations grow, i
 
 - **Spatial discretization:** Fourier spectral differentiation using FFTs.  
 - **Time integration:** Exponential Time-Differencing Runge–Kutta 4 (ETDRK4) scheme for stiff systems.  
-- **Domain:** Periodic boundaries on \( x \in [0, L] \).  
-- **Visualization:** Spatio-temporal color plot of \( u(x,t) \) using `plotters`.
+- **Domain:** Periodic boundaries on $$x \in [0, L]$$.  
+- **Visualization:** Spatio-temporal color plot of $$u(x,t)$$ using `plotters`.
 
 ## Physical Behavior
 
