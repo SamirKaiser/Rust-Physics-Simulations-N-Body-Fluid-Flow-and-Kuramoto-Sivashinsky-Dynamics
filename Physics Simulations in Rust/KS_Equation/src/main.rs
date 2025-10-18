@@ -3,13 +3,13 @@ use plotters::prelude::*;
 use rustfft::{num_traits::Zero, FftPlanner};
 use std::f64::consts::PI;
 
-const N: usize = 200;        // theory
-const L: f64 = 80.0;         // theory
-const DT: f64 = 0.1;         // theory
-const NSTEPS: usize = 1000;  // theory
-const SAVE_EVERY: usize = 4; // same cadence
-const NU: f64 = 1.0;         // KS: +nu k^2
-const GAMMA: f64 = 1.0;      // KS: -gamma k^4
+const N: usize = 200;        
+const L: f64 = 80.0;         
+const DT: f64 = 0.1;         
+const NSTEPS: usize = 1000;  
+const SAVE_EVERY: usize = 4; 
+const NU: f64 = 1.0;         
+const GAMMA: f64 = 1.0;      
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut planner = FftPlanner::<f64>::new();
