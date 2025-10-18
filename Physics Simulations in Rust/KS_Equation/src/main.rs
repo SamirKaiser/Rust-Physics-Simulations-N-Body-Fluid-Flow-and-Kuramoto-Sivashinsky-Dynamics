@@ -3,12 +3,13 @@ use plotters::prelude::*;
 use rustfft::{num_traits::Zero, FftPlanner};
 use std::f64::consts::PI;
 
-const N: usize = 128;
-const L: f64 = 32.0;
-const DT: f64 = 0.05;
-const NSTEPS: usize = 4000;
-const SAVE_EVERY: usize = 4;
-const NU: f64 = 0.1;
+const N: usize = 200;        // theory
+const L: f64 = 80.0;         // theory
+const DT: f64 = 0.1;         // theory
+const NSTEPS: usize = 1000;  // theory
+const SAVE_EVERY: usize = 4; // same cadence
+const NU: f64 = 1.0;         // KS: +nu k^2
+const GAMMA: f64 = 1.0;      // KS: -gamma k^4
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut planner = FftPlanner::<f64>::new();
@@ -18,13 +19,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dx = L / N as f64;
     let x: Vec<f64> = (0..N).map(|i| i as f64 * dx).collect();
 
+    // wavenumbers
     let mut k = vec![0.0; N];
     for i in 0..N {
-        let val = if i <= N / 2 { i as f64 } else { (i as f64) - (N as f64) };
-        k[i] = val * (2.0 * PI / L);
+        let m = if i <= N / 2 { i as f64 } else { i as f64 - N as f64 };
+        k[i] = m * (2.0 * PI / L);
     }
 
-    // Initial condition (traveling wave)
+    // initial condition
     let mut u = vec![0.0; N];
     for i in 0..N {
         let xi = x[i];
@@ -36,50 +38,66 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut u_hat: Vec<Complex<f64>> = u.iter().map(|&v| Complex::new(v, 0.0)).collect();
     fft.process(&mut u_hat);
 
+    // Linear operator: L(k) = NU*k^2 - GAMMA*k^4
     let mut lk = vec![0.0; N];
     for i in 0..N {
         let k2 = k[i] * k[i];
-        lk[i] = -k2 - NU * k2 * k2;
+        lk[i] = NU * k2 - GAMMA * k2 * k2;
     }
 
+    // exponentials
     let e: Vec<Complex<f64>> = lk.iter().map(|&v| Complex::new((DT * v).exp(), 0.0)).collect();
     let e2: Vec<Complex<f64>> = lk.iter().map(|&v| Complex::new((DT * v / 2.0).exp(), 0.0)).collect();
 
-    // ETDRK4 coefficients
-    let m = 16;
+    // === Correct ETDRK4 coefficients (Kassam–Trefethen) ===
+    let m = 16usize;
     let r: Vec<Complex<f64>> = (0..m)
         .map(|mm| Complex::from_polar(1.0, PI * (mm as f64 + 0.5) / m as f64))
         .collect();
 
-    let mut q: Vec<Complex<f64>> = vec![Complex::zero(); N];
-    let mut f1: Vec<Complex<f64>> = vec![Complex::zero(); N];
-    let mut f2: Vec<Complex<f64>> = vec![Complex::zero(); N];
-    let mut f3: Vec<Complex<f64>> = vec![Complex::zero(); N];
+    let mut q = vec![Complex::zero(); N];
+    let mut f1 = vec![Complex::zero(); N];
+    let mut f2 = vec![Complex::zero(); N];
+    let mut f3 = vec![Complex::zero(); N];
 
     for i in 0..N {
-        let mut l_dt_r = vec![Complex::zero(); m];
-        for mm in 0..m {
-            l_dt_r[mm] = Complex::new(DT * lk[i], 0.0) + r[mm];
+        let ldt = Complex::new(DT * lk[i], 0.0);
+        let mut acc_q  = Complex::zero();
+        let mut acc_f1 = Complex::zero();
+        let mut acc_f2 = Complex::zero();
+        let mut acc_f3 = Complex::zero();
+
+        for &rj in &r {
+            let lr  = ldt + rj;
+            let lr2 = lr * lr;
+            let lr3 = lr2 * lr;
+
+            let exp_lr   = lr.exp();
+            let exp_lr_2 = (lr * 0.5).exp();
+
+            // Q = h * mean( (exp(LR/2) - 1) / LR )
+            acc_q  += (exp_lr_2 - Complex::new(1.0, 0.0)) / lr;
+
+            // f1 = h * mean( (-4 - LR + exp(LR)*(4 - 3LR + LR^2)) / LR^3 )
+            acc_f1 += (-Complex::new(4.0, 0.0) - lr + exp_lr * (Complex::new(4.0, 0.0) - Complex::new(3.0, 0.0) * lr + lr2)) / lr3;
+
+            // f2 = h * mean( (2 + LR + exp(LR)*(-2 + LR)) / LR^3 )
+            acc_f2 += (Complex::new(2.0, 0.0) + lr + exp_lr * (-Complex::new(2.0, 0.0) + lr)) / lr3;
+
+            // f3 = h * mean( (-4 - 3LR - LR^2 + exp(LR)*(4 - LR)) / LR^3 )
+            acc_f3 += (-Complex::new(4.0, 0.0) - Complex::new(3.0, 0.0) * lr - lr2 + exp_lr * (Complex::new(4.0, 0.0) - lr)) / lr3;
         }
 
-        let inv: Vec<Complex<f64>> = l_dt_r.iter().map(|&z| Complex::new(1.0, 0.0) / z).collect();
-        let inv2: Vec<Complex<f64>> = l_dt_r.iter().map(|&z| Complex::new(1.0, 0.0) / (z * z)).collect();
-        let inv3: Vec<Complex<f64>> = l_dt_r.iter().map(|&z| Complex::new(1.0, 0.0) / (z * z * z)).collect();
+        let inv_m = 1.0 / (m as f64);
+        let dt_c  = Complex::new(DT, 0.0);
 
-        let sum_inv: Complex<f64> = inv.iter().sum();
-        let sum_inv2: Complex<f64> = inv2.iter().sum();
-        let sum_inv3: Complex<f64> = inv3.iter().sum();
-
-        let dt_c = Complex::new(DT, 0.0);
-        let m_c = Complex::new(m as f64, 0.0);
-
-        q[i] = dt_c * (sum_inv / m_c);
-        f1[i] = dt_c * ((sum_inv - Complex::new(3.0, 0.0) * sum_inv2 + Complex::new(4.0, 0.0) * sum_inv3) / m_c);
-        f2[i] = dt_c * ((Complex::new(2.0, 0.0) * sum_inv - Complex::new(4.0, 0.0) * sum_inv2 + Complex::new(2.0, 0.0) * sum_inv3) / m_c);
-        f3[i] = dt_c * ((sum_inv - sum_inv2) / m_c);
+        q[i]  = dt_c * (acc_q  * inv_m);
+        f1[i] = dt_c * (acc_f1 * inv_m);
+        f2[i] = dt_c * (acc_f2 * inv_m);
+        f3[i] = dt_c * (acc_f3 * inv_m);
     }
 
-    // Time evolution
+    // time evolution
     let nt_save = NSTEPS / SAVE_EVERY;
     let mut data = vec![vec![0.0; N]; nt_save];
 
@@ -100,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut c = vec![Complex::zero(); N];
         for i in 0..N {
-            c[i] = e2[i] * a[i] + q[i] * (Complex::new(2.0, 0.0) * n3[i]);
+            c[i] = e2[i] * a[i] + q[i] * (Complex::new(2.0, 0.0) * n3[i] - n1[i]);
         }
         let n4 = nonlinear(&c, &fft, &ifft, &k);
 
@@ -122,11 +140,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("✅ Integration complete. Drawing high-res plot...");
 
-    // === Plot settings ===
+    // plot
     let width = 1024;
     let height = 512;
     let root = BitMapBackend::new("ks_spacetime.png", (width, height)).into_drawing_area();
-    root.fill(&WHITE)?; // ✅ White background
+    root.fill(&WHITE)?;
 
     let (nt, nx) = (data.len(), N);
     let u_min = data.iter().flatten().fold(f64::INFINITY, |a, &b| a.min(b));
@@ -138,7 +156,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (ti, row) in data.iter().enumerate() {
         for (xi, &val) in row.iter().enumerate() {
             let norm = (val - u_min) / (u_max - u_min + 1e-12);
-            let rgba = HSLColor(norm, 1.0, 0.45).to_rgba(); // ✅ more contrast
+            let rgba = HSLColor(norm, 1.0, 0.45).to_rgba();
             let color = RGBColor(rgba.0, rgba.1, rgba.2);
 
             let x0 = (xi as f64 * cell_w) as i32;
@@ -146,10 +164,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let x1 = ((xi + 1) as f64 * cell_w) as i32;
             let y1 = ((ti + 1) as f64 * cell_h) as i32;
 
-            root.draw(&Rectangle::new(
-                [(x0, y0), (x1, y1)],
-                color.filled(),
-            ))?;
+            root.draw(&Rectangle::new([(x0, y0), (x1, y1)], color.filled()))?;
         }
     }
 
@@ -158,7 +173,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// === Nonlinear term ===
+// Nonlinear term with 2/3 de-aliasing:
+// -u u_x = -(1/2) ∂x (u^2)  ->  -0.5 i k FFT(u^2)
 fn nonlinear(
     u_hat: &[Complex<f64>],
     fft: &std::sync::Arc<dyn rustfft::Fft<f64>>,
@@ -166,20 +182,29 @@ fn nonlinear(
     k: &[f64],
 ) -> Vec<Complex<f64>> {
     let n = u_hat.len();
+
     let mut u_phys = u_hat.to_vec();
     ifft.process(&mut u_phys);
     for i in 0..n {
-        u_phys[i] /= n as f64;
+        u_phys[i] /= n as f64; // rustfft inverse is unnormalized
     }
 
     let u_sq: Vec<f64> = u_phys.iter().map(|z| z.re * z.re).collect();
     let mut res: Vec<Complex<f64>> = u_sq.iter().map(|&x| Complex::new(x, 0.0)).collect();
-
     fft.process(&mut res);
+
+    // 2/3 rule
+    let cutoff = (N as f64) / 3.0;
     for i in 0..n {
-        res[i] *= Complex::new(0.0, k[i]);
-        res[i] *= Complex::new(-0.5, 0.0);
+        let m = if i <= N / 2 { i as f64 } else { i as f64 - N as f64 };
+        if m.abs() > cutoff {
+            res[i] = Complex::zero();
+        }
     }
 
+    for i in 0..n {
+        res[i] *= Complex::new(0.0, k[i]);   // i k
+        res[i] *= Complex::new(-0.5, 0.0);   // -1/2
+    }
     res
 }
